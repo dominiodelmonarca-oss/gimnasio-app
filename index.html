@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Reservas Gimnasio</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --fondo: #0b1120; --tarjeta: #1f2937; --tarjeta2: #273449; --borde: #334155;
+    --texto: #f1f5f9; --suave: #94a3b8; --verde: #22c55e; --verde-osc: #15803d;
+    --rojo: #ef4444; --rojo-osc: #7f1d1d; --amarillo: #facc15;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--fondo); color: var(--texto);
+    font-family: Inter, system-ui, sans-serif; font-size: 15px; }
+  body { padding: 14px 14px 90px; }
+  .cab { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .cab img { width: 40px; height: 40px; border-radius: 10px; }
+  .refrescar { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; border: 2px solid var(--borde);
+    background: var(--tarjeta); font-size: 20px; cursor: pointer; }
+  .refrescar:active { transform: rotate(90deg); }
+  .titulo { font-family: "Bebas Neue", Impact, sans-serif; font-size: 30px; letter-spacing: 1px; line-height: 1;
+    text-shadow: 0 0 10px rgba(34,197,94,.55); }
+  .sub { color: var(--suave); font-size: 12px; }
+  .tarjeta { background: var(--tarjeta); border-radius: 16px; padding: 14px; margin-bottom: 12px; }
+  .etq { color: var(--suave); font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 6px; }
+
+  /* interruptor de estado */
+  .estado { width: 100%; border: 0; border-radius: 16px; padding: 16px; color: #fff; font: 800 17px Inter, sans-serif;
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; cursor: pointer; }
+  .estado.on { background: var(--verde-osc); animation: respira 3s ease-in-out infinite; }
+  .estado.off { background: var(--rojo-osc); animation: parpadea 1.2s ease-in-out infinite; }
+  .estado small { display: block; font-weight: 400; font-size: 12px; opacity: .85; margin-top: 2px; }
+  .estado .pastilla { background: rgba(0,0,0,.35); border-radius: 999px; padding: 8px 12px; font-size: 13px; }
+  @keyframes respira { 50% { background: var(--verde); box-shadow: 0 0 18px rgba(34,197,94,.45); } }
+  @keyframes parpadea { 50% { background: var(--rojo); } }
+
+  /* cuenta atrás */
+  .prox { font-weight: 800; font-size: 15px; }
+  .cuenta { font: 800 38px "SF Mono", Consolas, monospace; color: var(--verde); margin-top: 4px; letter-spacing: 1px; }
+  .cuenta.pronto { color: var(--amarillo); } .cuenta.ya { color: var(--rojo); }
+  .info { color: var(--suave); font-size: 12px; margin-top: 4px; }
+
+  /* pestañas de persona */
+  .pestanas { display: flex; gap: 8px; margin-bottom: 10px; }
+  .pest { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 14px;
+    border: 2px solid transparent; background: var(--tarjeta2); color: var(--texto); font: 800 15px Inter, sans-serif;
+    cursor: pointer; text-align: left; }
+  .pest img { width: 40px; height: 40px; border-radius: 50%; flex: 0 0 auto; }
+  .pest > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .pest.activa { border-color: var(--verde); background: #183224; }
+  .pest .n { font-size: 11px; color: var(--suave); font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; }
+
+  /* cuadrícula */
+  .rejilla { display: grid; grid-template-columns: 38px repeat(8, 1fr); gap: 4px; align-items: center; }
+  .rejilla .h { font-size: 9.5px; color: var(--suave); text-align: center; font-weight: 600; }
+  .rejilla .d { font-size: 12px; font-weight: 800; }
+  .celda { aspect-ratio: 1; border-radius: 8px; border: 2px solid var(--borde); background: transparent; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; padding: 0; }
+  .celda.si { background: var(--verde); border-color: var(--verde); box-shadow: 0 0 8px rgba(34,197,94,.5); }
+  .celda.cambio { outline: 2px dashed var(--amarillo); outline-offset: 1px; }
+
+  /* reserva manual */
+  .fila { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 8px; scrollbar-width: none; }
+  .chip { flex: 0 0 auto; border: 2px solid var(--borde); background: transparent; color: var(--texto); border-radius: 12px;
+    padding: 8px 10px; font: 600 13px Inter, sans-serif; cursor: pointer; text-align: center; }
+  .chip.sel { border-color: var(--verde); background: #183224; }
+  .chip b { display: block; font-size: 15px; }
+  .horas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+  .boton { width: 100%; border: 0; border-radius: 14px; padding: 14px; font: 800 16px Inter, sans-serif; cursor: pointer;
+    background: var(--verde); color: #04130a; }
+  .boton:disabled { background: var(--tarjeta2); color: var(--suave); }
+
+  /* reservas confirmadas en la web */
+  .reserva { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--tarjeta2); }
+  .reserva:last-of-type { border: 0; }
+  .reserva .ok { font-size: 20px; }
+  .segmento { display: flex; width: max-content; margin: 0 auto 10px; padding: 3px; gap: 2px; border-radius: 999px;
+    background: #4b5563; }
+  .segmento button { border: 0; border-radius: 999px; padding: 6px 18px; background: transparent; color: #f1f5f9;
+    font: 600 14px Inter, sans-serif; cursor: pointer; }
+  .segmento button.activa { background: var(--verde-osc); }
+  .segmento small { opacity: .75; font-weight: 400; margin-left: 4px; }
+  .reserva > div { flex: 1; min-width: 0; }
+  .reserva b { display: block; font-size: 15px; }
+  .reserva .quien { color: var(--verde); font-weight: 800; font-size: 13px; }
+  .anular { flex: 0 0 auto; border: 2px solid var(--rojo); background: transparent; color: var(--rojo); border-radius: 12px;
+    padding: 8px 10px; font: 800 13px Inter, sans-serif; cursor: pointer; }
+  .anular:active { background: var(--rojo-osc); }
+  .sin { color: var(--suave); font-size: 14px; padding: 6px 0; }
+  .sin b { display: block; color: var(--texto); font-size: 15px; }
+  .sin .broma { display: block; color: var(--verde); font-style: italic; font-weight: 600; margin-top: 3px; }
+
+  .res { font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--tarjeta2); }
+  .res:last-child { border: 0; }
+  .res code { color: var(--suave); font-size: 11px; margin-right: 4px; }
+  .aviso { background: #3b2f05; color: var(--amarillo); border-radius: 12px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }
+  .vacio { text-align: center; color: var(--suave); padding: 40px 10px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#0b1120'); tg.setBackgroundColor('#0b1120'); } catch (e) {} }
+const vibra = t => { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} };
+
+const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const CORTO = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const HORAS = ['09:00', '10:30', '12:00', '13:30', '15:00', '16:30', '18:00', '19:30'];
+const $ = h => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ---- estado enviado por el bot en la dirección (?d=...) ----
+// (no se usa '#...' porque Telegram escribe ahí sus propios datos al abrir la app)
+let E = null;
+try {
+  const m = location.search.match(/[?&]d=([^&]+)/) || location.hash.match(/[#&]d=([^&]+)/);
+  const b64 = decodeURIComponent(m[1]).replace(/-/g, '+').replace(/_/g, '/');
+  E = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))));
+} catch (e) { E = null; }
+
+const app = document.getElementById('app');
+if (!E) {
+  app.innerHTML = '<div class="vacio">🏋️<br><br>Abre esta app desde el botón <b>📱 App</b> del bot de Telegram.</div>';
+} else {
+  iniciar();
+}
+
+function iniciar() {
+  const personas = Object.keys(E.p);
+  const original = JSON.stringify({ on: E.on, p: Object.fromEntries(personas.map(n => [n, E.p[n].c])) });
+  const S = { on: E.on, p: Object.fromEntries(personas.map(n => [n, new Set(E.p[n].c.map(([d, h]) => d + '|' + h))])),
+              pers: personas[0], mPers: personas[0], mDia: null, mHora: null };
+  const ini = Object.fromEntries(personas.map(n => [n, new Set(S.p[n])]));
+  const cambios = () => JSON.stringify({ on: S.on, p: Object.fromEntries(personas.map(n =>
+    [n, [...S.p[n]].map(k => { const [d, h] = k.split('|'); return [+d, h]; }).sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]))])) }) !== original;
+
+  app.innerHTML = '';
+  const cab = $(`<div class="cab"><img src="img/pesa.png" alt=""><div style="flex:1;min-width:0"><div class="titulo">${E.lim ? 'RESERVAS DE ' + esc(personas[0]).toUpperCase() : 'RESERVAS GIMNASIO'}</div>
+    <div class="sub">Hortaleza · Sala multitrabajo · datos de las ${esc(E.t)}</div></div>
+    <button class="refrescar" title="Actualizar datos">🔄</button></div>`);
+  // Sin servidor la app no puede pedir datos sola: se cierra y el bot manda al momento un 📱 App con datos al día
+  cab.querySelector('.refrescar').onclick = () => {
+    const pedir = ok => ok && tg.sendData(JSON.stringify({ a: 'refrescar' }));
+    if (cambios()) tg.showConfirm('Tienes cambios sin guardar. ¿Actualizar igualmente y descartarlos?', pedir);
+    else pedir(true);
+  };
+  app.append(cab);
+
+  // --- interruptor ---
+  const est = $(`<button class="estado"></button>`);
+  if (!E.lim) est.onclick = () => { S.on = !S.on; vibra(); pintarEstado(); actualizarBoton(); pintarCuenta(); };
+  else est.style.cursor = 'default';  // versión limitada (beneficiario): solo se muestra el estado
+  app.append(est);
+  function pintarEstado() {
+    est.className = 'estado ' + (S.on ? 'on' : 'off');
+    const pend = S.on !== E.on ? ' (sin guardar)' : '';
+    const boton = t => E.lim ? '' : `<span class="pastilla">${t}</span>`;
+    est.innerHTML = S.on
+      ? `<div>✅ ACTIVADO${pend}<small>Las reservas automáticas funcionan</small></div>${boton('⏸ Desactivar')}`
+      : `<div>⛔ DESACTIVADO${pend}<small>No se hará ninguna reserva automática</small></div>${boton('▶ Activar')}`;
+  }
+
+  // --- cuenta atrás ---
+  const cuenta = $(`<div class="tarjeta"><div class="etq">⏱ Próxima reserva</div><div class="prox"></div>
+    <div class="cuenta"></div><div class="info"></div></div>`);
+  app.append(cuenta);
+  function proxima() {
+    const ahora = new Date(); let mejor = null;
+    for (const n of personas) for (const k of S.p[n]) {
+      const [d, h] = k.split('|'); const [hh, mm] = h.split(':').map(Number);
+      for (let i = 0; i < 22; i++) {
+        const c = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + i, hh, mm);
+        if ((c.getDay() + 6) % 7 !== +d) continue;
+        const abre = new Date(c.getTime() - E.da * 864e5 - E.ha * 36e5);
+        if (abre > ahora && (!mejor || abre < mejor.abre)) mejor = { n, c, abre, h };
+      }
+    }
+    return mejor;
+  }
+  function pintarCuenta() {
+    const p = proxima(), pr = cuenta.querySelector('.prox'), cu = cuenta.querySelector('.cuenta'), inf = cuenta.querySelector('.info');
+    if (!S.on) { pr.textContent = 'Reservas automáticas desactivadas'; cu.textContent = '--:--:--'; cu.className = 'cuenta ya'; inf.textContent = ''; return; }
+    if (!p) { pr.textContent = 'No hay clases marcadas'; cu.textContent = '--:--:--'; cu.className = 'cuenta'; inf.textContent = ''; return; }
+    const s = Math.floor((p.abre - new Date()) / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
+          m = Math.floor(s % 3600 / 60), ss = s % 60, z = x => String(x).padStart(2, '0');
+    pr.innerHTML = `${E.p[p.n].e} ${esc(p.n)} · ${DIAS[(p.c.getDay() + 6) % 7]} ${z(p.c.getDate())}/${z(p.c.getMonth() + 1)} a las ${p.h}`;
+    cu.textContent = (d ? d + 'd ' : '') + `${z(h)}:${z(m)}:${z(ss)}`;
+    cu.className = 'cuenta' + (s < 600 ? ' ya' : s < 3600 ? ' pronto' : '');
+    inf.textContent = `Se abre ${CORTO[(p.abre.getDay() + 6) % 7]} ${z(p.abre.getDate())}/${z(p.abre.getMonth() + 1)} a las ${z(p.abre.getHours())}:${z(p.abre.getMinutes())}`;
+  }
+  setInterval(pintarCuenta, 1000);
+
+  // --- reservas confirmadas en la web (las mira el PC con ver_reservas.py; 🔄 arriba para comprobar ahora) ---
+  // W.p = {persona: [[fecha, inicio, fin, carrito], ...]}, W.x = personas cuyas reservas puedo anular, W.e = iconos.
+  // Titular (admin): pestañas por persona (las mismas que "Clases cada semana") y puede anular las de todos.
+  // Beneficiario: solo ve y anula las suyas. Los permisos los vuelve a comprobar el bot.
+  const W = E.w || { t: '', ok: false, p: {} };  // botón 📱 App antiguo: sin datos de la web
+  const lista = n => { const v = W.p[n]; return Array.isArray(v) ? v : (v && v.r) || []; };  // también formato {e, x, r}
+  // "Ninguna reserva… <broma>": una de 300 al azar cada vez, sin repetir ninguna de las últimas 30
+  // (se recuerdan en el móvil)
+  const BROMAS = [
+    // músculos
+    'estás perdiendo músculo 😱', 'tus bíceps han pedido el traslado 💪', 'tus músculos están en modo avión ✈️',
+    'tu six-pack sigue en paradero desconocido 🔍', 'tus agujetas te echan de menos 😢',
+    'tus músculos han denunciado tu desaparición 🚨', 'tus tríceps se han puesto en huelga 📢',
+    'tus cuádriceps han pedido una excedencia 📄', 'tus glúteos se han jubilado antes de tiempo 🍑',
+    'tus abdominales están en hibernación 🐻', 'tus bíceps ya parecen fideos 🍜',
+    'tus pectorales han convocado una asamblea 🗣️', 'tus gemelos han pedido el divorcio 💔',
+    'tus hombros se han ido de vacaciones sin ti 🏖️', 'tu espalda pregunta qué es una dominada 🤷',
+    'tus músculos se están convirtiendo en gelatina 🍮', 'tus brazos ya solo levantan el mando de la tele 📺',
+    'tu fuerza se fue a por pan y no ha vuelto 🥖', 'tus músculos te han dejado en visto ✔️',
+    'tus abdominales siguen escondidos bajo el turrón 🍫', 'tus piernas han olvidado cómo se sube una escalera 🦵',
+    'tus bíceps se han abierto un perfil en una app de citas ❤️', 'tus músculos se han apuntado al paro 📉',
+    'tus lumbares han presentado la dimisión 🙇', 'tus músculos ya son patrimonio histórico 🏛️',
+    'tu musculatura está de rebajas 🏷️', 'tus deltoides han olvidado su propio nombre 🤔',
+    'tus isquiotibiales ni saben que existen 🦵', 'tus músculos se evaporan como un charco en agosto ☀️',
+    'tu cuerpo ha cambiado la contraseña y no te la dice 🔐',
+    // sofá y pereza
+    'el sofá va ganando 3-0 🛋️', 'el sofá ya tiene la forma exacta de tu cuerpo 🛋️',
+    'la manta y tú ya sois pareja de hecho 🧣', 'tu cama ha pedido la custodia completa 🛏️',
+    'el sofá te ha pedido matrimonio 💍', 'la siesta te ha nombrado socio de honor 😴',
+    'el mando de la tele es tu único entrenador 📺', 'tu récord personal es un maratón de series 🎬',
+    'el cojín te conoce mejor que tu madre 🛋️', 'la pereza te ha fichado como capitán 🏅',
+    'hoy has hecho cardio… de bostezos 🥱', 'tu único ejercicio es buscar el mando 🔎',
+    'tu deporte favorito es el zapping 📺', 'la almohada ya tiene tu huella dactilar 😴',
+    'la siesta va ganando por KO 🥊', 'llevas tanto tumbado que te van a cobrar IVA de mueble 🧾',
+    'el sofá ha empezado a cobrarte alquiler 💶', 'tu postura favorita sigue siendo la horizontal 🛌',
+    'para ti el gimnasio es una leyenda urbana 👻', 'tu paso más largo de hoy fue de la cama al sofá 🚶',
+    'tu energía está en modo ahorro 🔋', 'el pijama ya es tu uniforme oficial 👕',
+    'lo único que has levantado hoy es la persiana 😅', 'tu único sprint ha sido hacia la nevera 🏃',
+    'el sillón te ha puesto una placa conmemorativa 🏆', 'tu cama tiene una orden de alejamiento del gimnasio 🛏️',
+    'la pereza te ha renovado el contrato indefinido 📝', 'hoy solo entrenas la paciencia del sofá 🛋️',
+    'la tumbona te ha dado la tarjeta VIP 💳', 'tu reloj inteligente cree que estás en coma ⌚',
+    // comida
+    'la gravedad te está ganando la partida 🍔', 'el churro de esta mañana gana por goleada 🥐',
+    'tus batidos de proteína caducan de pena 🥤', 'la pizza te manda saludos 🍕',
+    'las croquetas celebran tu ausencia 🎉', 'el pan con tomate te ha ganado la batalla 🍅',
+    'la tortilla de patatas ya es tu mejor amiga 🍳', 'las patatas fritas te han hecho socio 🍟',
+    'la nevera te ha hecho cliente preferente 🧊', 'el chocolate te ha puesto un altar 🍫',
+    'los donuts te han nombrado embajador 🍩', 'el bocadillo de calamares te tiene en nómina 🥖',
+    'la paella del domingo cuenta contigo, el gimnasio no 🥘', 'el helado se está comiendo tus abdominales 🍦',
+    'tu dieta es más de «mañana empiezo» 🗓️', 'las palomitas son tu único peso libre 🍿',
+    'el turrón no entiende de temporadas 🎄', 'las magdalenas ya llevan tu nombre grabado 🧁',
+    'la hamburguesa doble te guiña un ojo 🍔', 'los nachos con queso te hacen la ola 🧀',
+    'el kebab de las dos de la mañana te sigue en redes 🌯', 'tus calorías están de fiesta sin control 🎊',
+    'la mayonesa te ha mandado un corazón ❤️', 'el chuletón se ríe de tus pesas 🥩',
+    'las galletas han desaparecido… tu cintura no 🍪', 'has cambiado las mancuernas por cucharas 🥄',
+    'la panadería ya te llama por tu nombre 🥐', 'tu única serie de repeticiones ha sido con el tenedor 🍴',
+    'tus proteínas son las del jamón 🍖', 'la tarta de cumpleaños te espera todos los días 🎂',
+    // gimnasio
+    'las mancuernas preguntan si sigues vivo 🏋️', 'el banco de press ya tiene otro dueño 😤',
+    'tus zapatillas están criando polvo 👟', 'la cinta de correr ya no recuerda tu cara 🏃',
+    'el espejo del gimnasio te da por fantasma 👻', 'la toalla se ha secado de aburrimiento 🧺',
+    'tus pesas ya tienen telarañas 🕸️', 'las pesas han hecho una porra sobre cuándo vuelves 🎲',
+    'la máquina de remo te busca con un cartel de «se busca» 🚣', 'el monitor ya te da por perdido 🙈',
+    'tu taquilla ya es de otro 🔒', 'la bicicleta estática sigue esperando… sin moverse 🚲',
+    'tu mochila de deporte huele a nostalgia 🎒', 'la esterilla se ha enrollado sola de pena 🧘',
+    'tu carnet del gimnasio pide socorro 🆘', 'las barras olímpicas han hecho unas olimpiadas sin ti 🥇',
+    'la kettlebell está buscando nuevo dueño 🔔', 'la báscula del vestuario ya ni te saluda ⚖️',
+    'tu bebida isotónica ha caducado 🧃', 'tus guantes de gimnasio han hecho las maletas 🧤',
+    'la comba se ha hecho un nudo de tristeza 🌀', 'la sala multitrabajo ha cambiado la cerradura 🗝️',
+    'las mancuernas de 5 kg se ríen de ti 😂', 'el saco de boxeo echa de menos tus golpes 🥊',
+    'la máquina de abdominales ha perdido tu ficha 🗂️', 'el gimnasio le ha dado tu sitio a otro 🏠',
+    'el aire acondicionado del gimnasio ya no te espera ❄️', 'la fuente del gimnasio pregunta por ti 🚰',
+    'los discos de 20 kg han sacado un comunicado oficial 📰', 'tu botella de agua sigue llena desde el lunes 💧',
+    // detectives y noticias
+    'el gimnasio ya ha puesto tu foto en un cartón de leche 🥛', 'hay una orden de búsqueda con tu nombre en recepción 🚔',
+    'los informativos abren con tu desaparición 📰', 'la Guardia Civil está rastreando tus agujetas 🕵️',
+    'se ofrece recompensa por tu último entrenamiento 💰', 'Sherlock Holmes no encuentra tus abdominales 🔍',
+    'la Interpol busca tu motivación 🌍', 'los vecinos te vieron por última vez en el sofá 👀',
+    'tu caso ya lo investiga Cuarto Milenio 👽', 'la policía ha precintado tu sofá como prueba 🚧',
+    'tu motivación sale en «¿Quién sabe dónde?» 📺', 'el CSI ha encontrado restos de patatas fritas en tu chándal 🧪',
+    'el detective privado no encuentra ni rastro de tus bíceps 🕵️', 'tu entrenador ha puesto una denuncia 🚓',
+    'el periódico titula: «Olvida dónde está el gimnasio» 🗞️', 'los satélites no detectan movimiento en tu zona 🛰️',
+    'la NASA confirma que tu actividad física es cero 🚀', 'un dron sobrevuela tu sofá buscando señales de vida 🚁',
+    'la científica ha analizado tu sudor: no existe 🔬', 'la recepcionista del gimnasio ha llamado a tu madre ☎️',
+    'el FBI ha abierto un expediente X sobre tu cuerpo 📁', 'tus músculos están en protección de testigos 🕶️',
+    'hay carteles con tu cara en todas las farolas 📌', 'la alarma de inactividad ha saltado en tu reloj 🚨',
+    'los perros rastreadores no encuentran tu fuerza de voluntad 🐕', 'han visto tu motivación en Benidorm 🏝️',
+    'las autoridades recomiendan levantarse del sofá ⚠️', 'Protección Civil emite alerta roja por sedentarismo 🔴',
+    'el juez te condena a 100 sentadillas ⚖️', 'te han multado por exceso de reposo 🧾',
+    // tecnología
+    'tus músculos tienen un 0 % de batería 🔋', 'tu cuerpo busca actualizaciones… sin éxito 🔄',
+    'tu cuenta de músculo ha sido desactivada por inactividad 💻', 'tus abdominales están en la nube… muy lejos ☁️',
+    'error 404: músculo no encontrado 🖥️', 'tu cuerpo funciona en modo avión permanente ✈️',
+    'Alexa, pon música triste para mis bíceps 🎵', 'tu reloj deportivo ha pedido otro dueño ⌚',
+    'tus pasos de hoy: del baño a la cocina 📱', 'tu wifi tiene más actividad que tú 📶',
+    'tus músculos necesitan reiniciarse 🔁', 'tu motivación se ha quedado sin cobertura 📵',
+    'el GPS dice que nunca has pisado el gimnasio 🗺️', 'tus músculos se han descargado en otro móvil 📲',
+    'Google Maps ha borrado la ruta al gimnasio 🧭', 'tu cuerpo espera un parche de seguridad 🩹',
+    'tu fuerza está en la papelera de reciclaje 🗑️', 'tu forma física necesita un antivirus 🦠',
+    'tus músculos están «escribiendo…» desde hace semanas 💬', 'tu chándal tiene más visualizaciones que tus entrenos 👁️',
+    'tus bíceps te han bloqueado en WhatsApp 🚫', 'hasta Siri te recomienda moverte 🗣️',
+    'tu contador de calorías se ha quedado dormido 💤', 'tus músculos están en modo bajo consumo 🔌',
+    'tu progreso se ha quedado cargando… ⏳', 'el algoritmo ya solo te recomienda sofás 📺',
+    'a tu cuerpo le ha caducado la suscripción 💳', 'tu entrenamiento sigue en «borradores» 📝',
+    'tus abdominales necesitan un reinicio de fábrica 🏭', 'tu fuerza de voluntad se ha quedado sin datos 📉',
+    // deporte
+    'ni el último de la liga ficharía tu forma física ⚽', 'vas primero en la liga de los perezosos 🏆',
+    'el árbitro te ha sacado roja por no aparecer 🟥', 'hasta los jubilados del parque te sacan ventaja 👴',
+    'los del pádel ya no te esperan 🎾', 'en el VAR no apareces por ningún lado 📺',
+    'tu equipo de fantasía te ha vendido 📉', 'has perdido por incomparecencia 🏳️',
+    'el banquillo es tu puesto fijo 🪑', 'tu entrenamiento está en la prórroga… desde hace meses ⏱️',
+    'el maratón te ha borrado de la lista 🏃', 'los Juegos Olímpicos te han descartado 🥇',
+    'ni los de la petanca te aceptan 🎳', 'tu marca personal es de 0 kilómetros 📏',
+    'el podio te mira desde muy lejos 🥉', 'has fichado por el Sofá Club de Fútbol 🛋️',
+    'tu temporada ha terminado antes de empezar 📅', 'el entrenador te ha mandado a la grada 🏟️',
+    'tu único gol ha sido en propia puerta ⚽', 'hasta el balón está más inflado que tus bíceps 🏀',
+    'tus rivales están entrenando ahora mismo 😈', 'el cronómetro se ha cansado de esperarte ⏱️',
+    'los de la clase de zumba preguntan por ti 💃', 'en la Vuelta Ciclista te dan por retirado 🚴',
+    'tu dorsal está cogiendo polvo 🎽', 'tu pistoletazo de salida nunca sonó 📯',
+    'te han descalificado por falta de asistencia ❌', 'el ranking del gimnasio ya ni te incluye 📊',
+    'los del crossfit te han declarado especie extinguida 🦖', 'la medalla a la constancia se la lleva otro 🏅',
+    // animales
+    'hasta un perezoso entrena más que tú 🦥', 'los caracoles te adelantan por la derecha 🐌',
+    'un koala te ha pedido consejos de descanso 🐨', 'los osos han copiado tu plan de hibernación 🐻',
+    'tu gato hace más ejercicio que tú 🐈', 'el pez del acuario nada más kilómetros que tú 🐠',
+    'las tortugas te han retado a una carrera 🐢', 'las palomas del parque se ríen de tu forma física 🐦',
+    'el hámster de tu sobrino tiene mejores piernas 🐹', 'un pingüino camina con más energía que tú 🐧',
+    'las hormigas levantan más peso que tú 🐜', 'un canguro te ha mandado un vídeo de saltos 🦘',
+    'tu perro sale a correr más que tú 🐕', 'las ardillas te miran con lástima 🐿️',
+    'el oso panda te pide que te muevas un poco 🐼', 'las vacas pastan con más ritmo que tú 🐄',
+    'un gorila te ha retirado el saludo 🦍', 'las gaviotas te han robado el bocadillo y las ganas 🌊',
+    'los leones duermen 20 horas… y aun así te ganan 🦁', 'el camaleón se esconde peor que tus abdominales 🦎',
+    'la babosa del jardín corre más que tú 🐌', 'el pulpo hace más ejercicios de brazos que tú 🐙',
+    'hasta el gallo madruga para entrenar 🐓', 'las abejas trabajan… tú no 🐝',
+    'un búho te ha visto toda la noche en el sofá 🦉', 'el flamenco aguanta más que tú a la pata coja 🦩',
+    'el elefante del circo hace más sentadillas 🐘', 'la cabra del monte sube más cuestas que tú 🐐',
+    'los delfines ya nadan sin ti 🐬', 'la planta del salón ha crecido más que tus bíceps 🌱',
+    // cine, series y dibujos
+    'Rocky Balboa ha apagado la música de entrenar 🎬', 'tus músculos ya salen en «Desaparecidos 2» 🎥',
+    'Netflix te pregunta si sigues ahí 📺', 'los Vengadores no te van a llamar así 🦸',
+    'Hulk dice que te falta algo de verde… de lechuga 💚', 'Gandalf grita: «¡No pasarás… del sofá!» 🧙',
+    'tu entrenamiento es más ficción que Star Wars 🌌', 'que la fuerza te acompañe… porque tú no la tienes ⭐',
+    'Superman ha cambiado su capa por tu manta 🦸', 'tu historia en el gimnasio es un cortometraje 🎞️',
+    'ni Harry Potter tiene un hechizo para esto 🪄', 'los zombis caminan con más energía que tú 🧟',
+    'Shrek tiene más abdominales que tú 🧅', 'el Grinch te ha robado las ganas de entrenar 🎁',
+    'Spiderman trepa edificios… tú ni al autobús 🕷️', 'Batman entrena de noche… tú duermes 🦇',
+    'tu vida es de suspense: ¿volverás algún día al gimnasio? 🍿', 'capítulo de hoy: «El sofá contraataca» 🎬',
+    'los Minions te han nombrado jefe de siesta 🍌', 'Mr. Bean tiene más agilidad que tú 🚗',
+    'James Bond cumpliría la misión… tú ni apareces 🕴️', 'en «Fast & Furious» no te quieren ni de extra 🏎️',
+    'Thor ha perdido su martillo… y tú las ganas 🔨', 'Popeye te ofrece espinacas de urgencia 🥬',
+    'Obélix levanta más menhires que tú mancuernas 🗿', 'Goku te espera en la sala del tiempo para entrenar 🐉',
+    'Mario Bros salta más que tú 🍄', 'el pato Donald tiene mejores piernas que tú 🦆',
+    'Bob Esponja hace más abdominales en su piña 🍍', 'Pac-Man come mucho, pero al menos corre 👾',
+    // vida diaria
+    'hasta la báscula se está riendo de ti ⚖️', 'tu abuela levanta más bolsas de la compra 👵',
+    'tu madre pregunta si el gimnasio sigue existiendo 👩', 'los vecinos hacen apuestas sobre tu regreso 🏘️',
+    'tu chándal se ha convertido en pijama 👕', 'el ascensor ya te saluda por tu nombre 🏢',
+    'tu cuñado ya va al gimnasio y te lo restriega 😏', 'en la cena de Navidad te preguntarán por el gimnasio 🎅',
+    'el portero de tu casa te ve más que el del gimnasio 🚪', 'la frutera sabe más de tu dieta que tu entrenador 🍎',
+    'tu vecino de 80 años va dos veces por semana 👴', 'tu madre ha guardado tus zapatillas en el trastero 📦',
+    'los niños del parque corren más que tú 🧒', 'tus pantalones han empezado a apretar 👖',
+    'el cinturón te pide un agujero más 😬', 'tu camiseta de tirantes se ha jubilado 🎽',
+    'el verano se acerca… y tú sigues en el sofá ☀️', 'la operación bikini ahora es la operación manta 🏖️',
+    'tus amigos han creado un grupo de gimnasio sin ti 👥', 'el carro de la compra pesa más que tus entrenos 🛒',
+    'hasta la lavadora centrifuga más que tú 🌀', 'tu suegra ya ha hecho un comentario 🙄',
+    'la báscula del baño ha pedido vacaciones 🏝️', 'el espejo de casa suspira cada vez que pasas 😩',
+    'te mandan memes de gimnasio y no los pillas 😂', 'el cartero hace más kilómetros que tú 📬',
+    'el perro del vecino te adelanta en el paseo 🐶', 'tu agenda tiene hueco para todo menos para entrenar 📒',
+    'tu propósito de Año Nuevo ha pedido la baja 🎆', 'mañana empiezas… como todos los días desde 2019 📆'];
+  const RECORDAR = 30;  // cuántas de las últimas vistas no se repiten
+  function broma() {
+    let vistas = [];
+    try { vistas = JSON.parse(localStorage.getItem('bromasVistas') || '[]'); } catch (e) {}
+    const libres = BROMAS.map((_, i) => i).filter(i => !vistas.includes(i));
+    const i = libres[Math.floor(Math.random() * libres.length)];
+    try { localStorage.setItem('bromasVistas', JSON.stringify([...vistas, i].slice(-RECORDAR))); } catch (e) {}
+    return BROMAS[i];
+  }
+  const web = $(`<div class="tarjeta"></div>`);
+  app.append(web);
+  function pintarWeb() {
+    const z = x => String(x).padStart(2, '0');
+    const ahora = new Date(), hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+    const ahoraTxt = `${ahora.getFullYear()}-${z(ahora.getMonth() + 1)}-${z(ahora.getDate())} ${z(ahora.getHours())}:${z(ahora.getMinutes())}`;
+    const relativo = t => {  // 'AAAA-MM-DD HH:MM' -> 'hoy a las HH:MM'
+      const [f, h] = t.split(' '), [a, m, d] = f.split('-').map(Number);
+      const dif = Math.round((hoy - new Date(a, m - 1, d)) / 864e5);
+      return (dif === 0 ? 'hoy' : dif === 1 ? 'ayer' : `el ${z(d)}/${z(m)}`) + ` a las ${h}`;
+    };
+    web.innerHTML = '<div class="etq">📅 Reservas confirmadas en la web</div>';
+    let ver = Object.keys(W.p);
+    if (!E.lim && ver.length > 1) {  // titular: elegir persona (selector como el de la app del PC)
+      const seg = $(`<div class="segmento"></div>`);
+      for (const n of personas) {
+        const cuantas = lista(n).filter(([f, ini]) => `${f} ${ini}` > ahoraTxt).length;
+        const b = $(`<button class="${n === S.pers ? 'activa' : ''}">${esc(n)}<small>(${cuantas})</small></button>`);
+        b.onclick = () => { S.pers = n; vibra(); pintarWeb(); pintarPestanas(); pintarRejilla(); };
+        seg.append(b);
+      }
+      web.append(seg);
+      ver = [S.pers];
+    }
+    const filas = [];
+    for (const n of ver) {
+      const icono = (W.e || {})[n] || (E.p[n] || {}).e || '👤', mias = !W.x || W.x.includes(n);
+      for (const [f, ini, fin, c] of lista(n)) {
+        const carrito = mias ? c : '';
+        if (`${f} ${ini}` <= ahoraTxt) continue;  // ya ha empezado o pasado
+        const [a, m, d] = f.split('-').map(Number), dia = new Date(a, m - 1, d);
+        const dif = Math.round((dia - hoy) / 864e5);
+        const cuando = dif === 0 ? 'Hoy' : dif === 1 ? 'Mañana' : DIAS[(dia.getDay() + 6) % 7];
+        const fila = $(`<div class="reserva"><span class="ok">✅</span><div><b>${cuando} ${z(d)}/${z(m)} · ${esc(ini)} – ${esc(fin)}</b>
+          <span class="quien">${esc(icono)} ${esc(n)}</span></div>${carrito ? '<button class="anular">✖ Anular</button>' : ''}</div>`);
+        if (carrito) fila.querySelector('.anular').onclick = () => {
+          const txt = `¿ANULAR la reserva de ${n} del ${cuando.toLowerCase()} ${z(d)}/${z(m)} a las ${ini}?\n\nSe anula de verdad en la web.`
+            + (cambios() ? '\n\n(Perderás los cambios sin guardar de las clases.)' : '');
+          const enviar = ok => ok && tg.sendData(JSON.stringify({ a: 'anular', p: n, c: carrito }));
+          if (tg && tg.showConfirm) tg.showConfirm(txt, enviar); else enviar(confirm(txt));
+        };
+        filas.push([f + ini, fila]);
+      }
+    }
+    filas.sort((x, y) => x[0].localeCompare(y[0])).forEach(([, el]) => web.append(el));
+    if (!filas.length) web.append($(W.t ? `<div class="sin"><b>Ninguna reserva…</b><span class="broma">${esc(broma())}</span></div>`
+                                        : '<div class="sin">Aún sin comprobar</div>'));
+    const info = !W.t ? 'Pulsa 🔄 arriba para comprobarlo en la web'
+      : (W.ok ? 'Comprobado ' : '⚠️ La última comprobación falló · datos de ') + relativo(W.t);
+    web.append($(`<div class="info">${esc(info)}</div>`));
+  }
+
+  // --- clases por persona ---
+  const clases = $(`<div class="tarjeta"><div class="etq">🗓 Clases cada semana</div><div class="pestanas"></div>
+    <div class="rejilla"></div><div class="info" style="margin-top:8px">La reserva se abre ${E.da} días y ${E.ha} h antes de cada clase.</div></div>`);
+  app.append(clases);
+  function pintarPestanas() {
+    const c = clases.querySelector('.pestanas'); c.innerHTML = '';
+    for (const n of personas) {
+      const b = $(`<button class="pest ${n === S.pers ? 'activa' : ''}"><img src="img/${esc(E.p[n].av)}" alt="">
+        <span>${esc(n)}<span class="n">${S.p[n].size} clase${S.p[n].size === 1 ? '' : 's'}/sem.</span></span></button>`);
+      b.onclick = () => { S.pers = n; vibra(); pintarPestanas(); pintarRejilla(); pintarWeb(); };
+      c.append(b);
+    }
+  }
+  function pintarRejilla() {
+    const r = clases.querySelector('.rejilla'); r.innerHTML = '<div></div>';
+    HORAS.forEach(h => r.append($(`<div class="h">${h}</div>`)));
+    for (let d = 0; d < 7; d++) {
+      r.append($(`<div class="d">${CORTO[d]}</div>`));
+      HORAS.forEach(h => {
+        const k = d + '|' + h, si = S.p[S.pers].has(k), cambio = si !== ini[S.pers].has(k);
+        const b = $(`<button class="celda ${si ? 'si' : ''} ${cambio ? 'cambio' : ''}">${si ? '✓' : ''}</button>`);
+        b.onclick = () => { si ? S.p[S.pers].delete(k) : S.p[S.pers].add(k); vibra(); pintarRejilla(); pintarPestanas(); pintarCuenta(); actualizarBoton(); };
+        r.append(b);
+      });
+    }
+  }
+
+  // --- reserva manual ---
+  const man = $(`<div class="tarjeta"><div class="etq">⚡ Reserva manual (ahora mismo)</div>
+    <div class="fila per"></div><div class="fila dias"></div><div class="horas"></div>
+    <button class="boton">Elige persona, día y hora</button></div>`);
+  app.append(man);
+  function pintarManual() {
+    const z = x => String(x).padStart(2, '0');
+    const fp = man.querySelector('.per'); fp.innerHTML = '';
+    personas.forEach(n => { const b = $(`<button class="chip ${n === S.mPers ? 'sel' : ''}">${E.p[n].e} ${esc(n)}</button>`);
+      b.onclick = () => { S.mPers = n; vibra(); pintarManual(); }; fp.append(b); });
+    const fd = man.querySelector('.dias'); fd.innerHTML = '';
+    for (let i = 0; i < 8; i++) {
+      const f = new Date(); f.setDate(f.getDate() + i);
+      const clave = `${f.getFullYear()}${z(f.getMonth() + 1)}${z(f.getDate())}`;
+      const b = $(`<button class="chip ${clave === S.mDia ? 'sel' : ''}">${i === 0 ? 'Hoy' : i === 1 ? 'Mañ.' : CORTO[(f.getDay() + 6) % 7]}<b>${z(f.getDate())}/${z(f.getMonth() + 1)}</b></button>`);
+      b.onclick = () => { S.mDia = clave; S.mDiaTxt = `${DIAS[(f.getDay() + 6) % 7]} ${z(f.getDate())}/${z(f.getMonth() + 1)}`; vibra(); pintarManual(); };
+      fd.append(b);
+    }
+    const fh = man.querySelector('.horas'); fh.innerHTML = '';
+    HORAS.forEach(h => { const b = $(`<button class="chip ${h === S.mHora ? 'sel' : ''}">${h}</button>`);
+      b.onclick = () => { S.mHora = h; vibra(); pintarManual(); }; fh.append(b); });
+    const bt = man.querySelector('.boton'), listo = S.mPers && S.mDia && S.mHora;
+    bt.disabled = !listo;
+    bt.textContent = listo ? `⚡ Reservar ${S.mPers} · ${S.mDiaTxt} ${S.mHora}` : 'Elige persona, día y hora';
+    bt.onclick = () => {
+      const enviar = ok => ok && tg.sendData(JSON.stringify({ a: 'reservar', p: S.mPers, f: S.mDia, h: S.mHora }));
+      const txt = `¿Reservar AHORA para ${S.mPers} el ${S.mDiaTxt} a las ${S.mHora}?`;
+      if (tg && tg.showConfirm) tg.showConfirm(txt, enviar); else enviar(confirm(txt));
+    };
+  }
+
+  // --- últimos resultados ---
+  const res = $(`<div class="tarjeta"><div class="etq">📋 Últimos resultados</div></div>`);
+  (E.r.length ? E.r : [['', '', 'Todavía no hay resultados']]).slice().reverse().forEach(([i, f, t]) =>
+    res.append($(`<div class="res">${i} <code>${esc(f)}</code>${esc(t)}</div>`)));
+  app.append(res);
+
+  // --- botón Guardar (botón principal de Telegram) ---
+  function actualizarBoton() {
+    if (!tg) return;
+    if (cambios()) {
+      tg.MainButton.setParams({ text: '💾 GUARDAR CAMBIOS', color: '#22c55e', text_color: '#04130a', is_visible: true });
+    } else tg.MainButton.hide();
+  }
+  if (tg) tg.MainButton.onClick(() => {
+    const p = Object.fromEntries(personas.map(n => [n, [...S.p[n]].map(k => { const [d, h] = k.split('|'); return [+d, h]; })]));
+    tg.sendData(JSON.stringify({ a: 'guardar', on: S.on, p }));
+  });
+
+  pintarEstado(); pintarCuenta(); pintarWeb(); pintarPestanas(); pintarRejilla(); pintarManual(); actualizarBoton();
+}
+</script>
+</body>
+</html>
