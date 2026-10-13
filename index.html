@@ -70,7 +70,17 @@
     padding: 8px 10px; font: 600 13px Inter, sans-serif; cursor: pointer; text-align: center; }
   .chip.sel { border-color: var(--verde); background: #183224; }
   .chip b { display: block; font-size: 15px; }
-  .horas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+  /* horas libres: un cuadro por hora (como en la app del PC); solo los verdes se pulsan */
+  .cuadros { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+  .cuadro { border: 0; border-radius: 10px; padding: 8px 2px; font: 800 15px Inter, sans-serif; color: var(--suave);
+    background: #374151; text-align: center; }
+  .cuadro small { display: block; font-size: 10.5px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
+  .cuadro.libre { background: var(--verde-osc); color: #fff; box-shadow: 0 0 8px rgba(34,197,94,.45); cursor: pointer; }
+  .cuadro.libre:active { background: var(--verde); }
+  .cuadro.completa { background: #4c1d1d; color: #fca5a5; }
+  .cuadro.tuya { background: #14532d; color: var(--verde); }
+  .aviso.bien { background: #14321f; color: var(--verde); }
+  .aviso.mal { background: #3b1212; color: #fca5a5; }
   .boton { width: 100%; border: 0; border-radius: 14px; padding: 14px; font: 800 16px Inter, sans-serif; cursor: pointer;
     background: var(--verde); color: #04130a; }
   .boton:disabled { background: var(--tarjeta2); color: var(--suave); }
@@ -348,13 +358,22 @@ function iniciar() {
     }
   }
 
-  // --- reserva manual ---
+  // --- reserva manual: horas libres ---
+  // Sin servidor la app no puede mirar la web: "Ver horas libres" la cierra, el PC mira la web (~20 s) y el bot manda
+  // un 📱 App nuevo con las horas en E.hl = {p, f:'AAAAMMDD', t:'HH:MM', c: código, r: texto, m: aviso,
+  // h: [[hora, estado, plazas, 'AAAA-MM-DD HH:MM' de apertura]]}; estado: libre / completa / no_abierta / empezada / tuya.
+  // Al pulsar un cuadro verde se reserva (la app se cierra y llega el resultado). Los permisos los comprueba el bot.
+  const z2 = x => String(x).padStart(2, '0');
+  const diaTxt = clave => { const f = new Date(+clave.slice(0, 4), +clave.slice(4, 6) - 1, +clave.slice(6, 8));
+    return `${DIAS[(f.getDay() + 6) % 7]} ${z2(f.getDate())}/${z2(f.getMonth() + 1)}`; };
+  const HL = E.hl && E.p[E.hl.p] && Array.isArray(E.hl.h) ? E.hl : null;
+  if (HL) { S.mPers = HL.p; S.mDia = HL.f; S.mDiaTxt = diaTxt(HL.f); }
   const man = $(`<div class="tarjeta"><div class="etq">⚡ Reserva manual (ahora mismo)</div>
-    <div class="fila per"></div><div class="fila dias"></div><div class="horas"></div>
-    <button class="boton">Elige persona, día y hora</button></div>`);
+    <div class="fila per"></div><div class="fila dias"></div><div class="hl"></div>
+    <button class="boton">Elige persona y día</button><div class="info nota"></div></div>`);
   app.append(man);
   function pintarManual() {
-    const z = x => String(x).padStart(2, '0');
+    const z = z2;
     const fp = man.querySelector('.per'); fp.innerHTML = '';
     personas.forEach(n => { const b = $(`<button class="chip ${n === S.mPers ? 'sel' : ''}">${E.p[n].e} ${esc(n)}</button>`);
       b.onclick = () => { S.mPers = n; vibra(); pintarManual(); }; fp.append(b); });
@@ -363,19 +382,51 @@ function iniciar() {
       const f = new Date(); f.setDate(f.getDate() + i);
       const clave = `${f.getFullYear()}${z(f.getMonth() + 1)}${z(f.getDate())}`;
       const b = $(`<button class="chip ${clave === S.mDia ? 'sel' : ''}">${i === 0 ? 'Hoy' : i === 1 ? 'Mañ.' : CORTO[(f.getDay() + 6) % 7]}<b>${z(f.getDate())}/${z(f.getMonth() + 1)}</b></button>`);
-      b.onclick = () => { S.mDia = clave; S.mDiaTxt = `${DIAS[(f.getDay() + 6) % 7]} ${z(f.getDate())}/${z(f.getMonth() + 1)}`; vibra(); pintarManual(); };
+      b.onclick = () => { S.mDia = clave; S.mDiaTxt = diaTxt(clave); vibra(); pintarManual(); };
       fd.append(b);
     }
-    const fh = man.querySelector('.horas'); fh.innerHTML = '';
-    HORAS.forEach(h => { const b = $(`<button class="chip ${h === S.mHora ? 'sel' : ''}">${h}</button>`);
-      b.onclick = () => { S.mHora = h; vibra(); pintarManual(); }; fh.append(b); });
-    const bt = man.querySelector('.boton'), listo = S.mPers && S.mDia && S.mHora;
+    // cuadros de horas (solo si lo que mandó el bot es de la persona y el día elegidos)
+    const fh = man.querySelector('.hl'); fh.innerHTML = '';
+    const verHL = HL && HL.p === S.mPers && HL.f === S.mDia;
+    if (verHL) {
+      if (HL.m) fh.append($(`<div class="aviso ${HL.m.startsWith('✅') ? 'bien' : HL.m.startsWith('❌') ? 'mal' : ''}">${esc(HL.m)}</div>`));
+      if (HL.c !== 0) {
+        fh.append($(`<div class="sin">${HL.c === 2 ? '⏳' : '⚠️'} ${esc(HL.r || 'No se pudo mirar la web')}</div>`));
+      } else {
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const cuad = $(`<div class="cuadros"></div>`); let libres = 0;
+        for (const [hora, est, pl, abre] of HL.h) {
+          let abajo = 'ya empezó';
+          if (est === 'libre') { libres++; abajo = pl === 1 ? '1 plaza' : `${pl} plazas`; }
+          else if (est === 'completa') abajo = 'completa';
+          else if (est === 'tuya') abajo = '✓ reservada';
+          else if (est === 'no_abierta') {
+            const [fa, ha] = String(abre).split(' '), [a, m, d] = fa.split('-').map(Number);
+            const dif = Math.round((new Date(a, m - 1, d) - hoy) / 864e5);
+            abajo = `abre ${dif === 0 ? 'hoy' : dif === 1 ? 'mañ.' : CORTO[(new Date(a, m - 1, d).getDay() + 6) % 7].toLowerCase()} ${ha}`;
+          }
+          const b = $(`<button class="cuadro ${esc(est)}" ${est === 'libre' ? '' : 'disabled'}>${esc(hora)}<small>${esc(abajo)}</small></button>`);
+          if (est === 'libre') b.onclick = () => {
+            const txt = `¿Reservar AHORA para ${S.mPers} el ${S.mDiaTxt} a las ${hora}?\n\nLa app se cerrará y te llegará el resultado.`
+              + (cambios() ? '\n\n(Perderás los cambios sin guardar de las clases.)' : '');
+            const enviar = ok => ok && tg.sendData(JSON.stringify({ a: 'reservar_hora', p: S.mPers, f: S.mDia, h: hora }));
+            if (tg && tg.showConfirm) tg.showConfirm(txt, enviar); else enviar(confirm(txt));
+          };
+          cuad.append(b);
+        }
+        fh.append(cuad);
+        fh.append($(`<div class="info" style="margin:0 0 10px">${libres ? `✅ ${libres} hora${libres === 1 ? '' : 's'} con plazas: pulsa una verde para reservarla`
+                                                                  : '❌ Ninguna hora con plazas libres'} · mirado a las ${esc(HL.t)}</div>`));
+      }
+    }
+    const bt = man.querySelector('.boton'), listo = S.mPers && S.mDia;
     bt.disabled = !listo;
-    bt.textContent = listo ? `⚡ Reservar ${S.mPers} · ${S.mDiaTxt} ${S.mHora}` : 'Elige persona, día y hora';
+    bt.textContent = !listo ? 'Elige persona y día' : verHL ? '🔄 Mirar otra vez' : `🔍 Ver horas libres · ${S.mPers} · ${S.mDiaTxt}`;
+    man.querySelector('.nota').textContent = listo ? 'La app se cerrará y en unos 20 segundos te llegará un 📱 App nuevo con las horas.' : '';
     bt.onclick = () => {
-      const enviar = ok => ok && tg.sendData(JSON.stringify({ a: 'reservar', p: S.mPers, f: S.mDia, h: S.mHora }));
-      const txt = `¿Reservar AHORA para ${S.mPers} el ${S.mDiaTxt} a las ${S.mHora}?`;
-      if (tg && tg.showConfirm) tg.showConfirm(txt, enviar); else enviar(confirm(txt));
+      const enviar = ok => ok && tg.sendData(JSON.stringify({ a: 'horas', p: S.mPers, f: S.mDia }));
+      if (cambios()) tg.showConfirm('Tienes cambios sin guardar. ¿Mirar las horas igualmente y descartarlos?', enviar);
+      else enviar(true);
     };
   }
 
@@ -398,6 +449,7 @@ function iniciar() {
   });
 
   pintarEstado(); pintarCuenta(); pintarWeb(); pintarPestanas(); pintarRejilla(); pintarManual(); actualizarBoton();
+  if (HL) setTimeout(() => man.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);  // ir directo a las horas
 }
 </script>
 </body>
