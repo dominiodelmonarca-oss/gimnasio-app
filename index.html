@@ -105,6 +105,14 @@
   .sin b { display: block; color: var(--texto); font-size: 15px; }
   .sin .broma { display: block; color: var(--verde); font-style: italic; font-weight: 600; margin-top: 3px; }
 
+  /* desplegable de centro */
+  .centro { position: relative; }
+  .centro select { width: 100%; appearance: none; -webkit-appearance: none; background: var(--tarjeta2); color: var(--texto);
+    border: 2px solid var(--verde); border-radius: 12px; padding: 12px 40px 12px 12px; font: 800 16px Inter, sans-serif; }
+  .centro::after { content: '▾'; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--verde);
+    font-size: 18px; pointer-events: none; }
+  .rejilla .finde { grid-column: 1 / -1; font-size: 10.5px; color: var(--suave); margin-top: 6px; }
+
   .res { font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--tarjeta2); }
   .res:last-child { border: 0; }
   .res code { color: var(--suave); font-size: 11px; margin-right: 4px; }
@@ -121,7 +129,8 @@ const vibra = t => { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} 
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const CORTO = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-const HORAS = ['09:00', '10:30', '12:00', '13:30', '15:00', '16:30', '18:00', '19:30'];
+const HORAS = ['09:00', '10:30', '12:00', '13:30', '15:00', '16:30', '18:00', '19:30'];  // si el bot no manda las del centro
+const nrm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 const $ = h => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -143,16 +152,30 @@ if (!E) {
 
 function iniciar() {
   const personas = Object.keys(E.p);
-  const original = JSON.stringify({ on: E.on, p: Object.fromEntries(personas.map(n => [n, E.p[n].c])) });
-  const S = { on: E.on, p: Object.fromEntries(personas.map(n => [n, new Set(E.p[n].c.map(([d, h]) => d + '|' + h))])),
-              pers: personas[0], mPers: personas[0], mDia: null, mHora: null };
-  const ini = Object.fromEntries(personas.map(n => [n, new Set(S.p[n])]));
-  const cambios = () => JSON.stringify({ on: S.on, p: Object.fromEntries(personas.map(n =>
-    [n, [...S.p[n]].map(k => { const [d, h] = k.split('|'); return [+d, h]; }).sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]))])) }) !== original;
+  // Centros: E.ks = nombres (el primero es el de siempre), E.kh = {centro: [horas lunes-viernes, horas sábado-domingo]},
+  // E.p[n].k = {centro: clases}. Con un 📱 App del bot viejo (sin centros) todo es de Hortaleza (E.p[n].c).
+  const CENTROS = E.ks && E.ks.length ? E.ks : ['Hortaleza'], VARIOS = CENTROS.length > 1;
+  const KH = E.kh || { [CENTROS[0]]: [HORAS, HORAS] };
+  const horasDe = (k, d) => (KH[k] || [HORAS, HORAS])[d >= 5 ? 1 : 0];
+  const clasesDe = n => E.p[n].k || { [CENTROS[0]]: E.p[n].c };
+  const delCentro = (k, fila) => nrm(fila || CENTROS[0]) === nrm(k);
+  const aLista = set => [...set].map(k => { const [d, h] = k.split('|'); return [+d, h]; })
+    .sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]));
+  let centroIni = CENTROS[0];  // el último elegido en este móvil (o el de las horas libres que llegan)
+  try { const g = localStorage.getItem('centro'); if (CENTROS.includes(g)) centroIni = g; } catch (e) {}
+  if (E.hl && E.hl.k && CENTROS.includes(E.hl.k)) centroIni = E.hl.k;
+  const S = { on: E.on, k: centroIni, pers: personas[0], mPers: personas[0], mDia: null, mHora: null,
+              p: Object.fromEntries(personas.map(n => [n, Object.fromEntries(CENTROS.map(k =>
+                [k, new Set((clasesDe(n)[k] || []).map(([d, h]) => d + '|' + h))]))])) };
+  const foto = () => JSON.stringify({ on: S.on, p: Object.fromEntries(personas.map(n =>
+    [n, Object.fromEntries(CENTROS.map(k => [k, aLista(S.p[n][k])]))])) });
+  const original = foto();
+  const ini = Object.fromEntries(personas.map(n => [n, Object.fromEntries(CENTROS.map(k => [k, new Set(S.p[n][k])]))]));
+  const cambios = () => foto() !== original;
 
   app.innerHTML = '';
   const cab = $(`<div class="cab"><img src="img/pesa.png" alt=""><div style="flex:1;min-width:0"><div class="titulo">${E.lim ? 'RESERVAS DE ' + esc(personas[0]).toUpperCase() : 'RESERVAS GIMNASIO'}</div>
-    <div class="sub">Hortaleza · Sala multitrabajo · datos de las ${esc(E.t)}</div></div>
+    <div class="sub">${VARIOS ? '' : esc(CENTROS[0]) + ' · '}Sala multitrabajo · datos de las ${esc(E.t)}</div></div>
     <button class="refrescar" title="Actualizar datos">🔄</button></div>`);
   // Sin servidor la app no puede pedir datos sola: se cierra y el bot manda al momento un 📱 App con datos al día
   cab.querySelector('.refrescar').onclick = () => {
@@ -182,13 +205,13 @@ function iniciar() {
   app.append(cuenta);
   function proxima() {
     const ahora = new Date(); let mejor = null;
-    for (const n of personas) for (const k of S.p[n]) {
+    for (const n of personas) for (const centro of CENTROS) for (const k of S.p[n][centro]) {
       const [d, h] = k.split('|'); const [hh, mm] = h.split(':').map(Number);
       for (let i = 0; i < 22; i++) {
         const c = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + i, hh, mm);
         if ((c.getDay() + 6) % 7 !== +d) continue;
         const abre = new Date(c.getTime() - E.da * 864e5 - E.ha * 36e5);
-        if (abre > ahora && (!mejor || abre < mejor.abre)) mejor = { n, c, abre, h };
+        if (abre > ahora && (!mejor || abre < mejor.abre)) mejor = { n, c, abre, h, centro };
       }
     }
     return mejor;
@@ -199,19 +222,33 @@ function iniciar() {
     if (!p) { pr.textContent = 'No hay clases marcadas'; cu.textContent = '--:--:--'; cu.className = 'cuenta'; inf.textContent = ''; return; }
     const s = Math.floor((p.abre - new Date()) / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
           m = Math.floor(s % 3600 / 60), ss = s % 60, z = x => String(x).padStart(2, '0');
-    pr.innerHTML = `${E.p[p.n].e} ${esc(p.n)} · ${DIAS[(p.c.getDay() + 6) % 7]} ${z(p.c.getDate())}/${z(p.c.getMonth() + 1)} a las ${p.h}`;
+    pr.innerHTML = `${E.p[p.n].e} ${esc(p.n)} · ${DIAS[(p.c.getDay() + 6) % 7]} ${z(p.c.getDate())}/${z(p.c.getMonth() + 1)} a las ${p.h}`
+      + (VARIOS ? ` · ${esc(p.centro)}` : '');
     cu.textContent = (d ? d + 'd ' : '') + `${z(h)}:${z(m)}:${z(ss)}`;
     cu.className = 'cuenta' + (s < 600 ? ' ya' : s < 3600 ? ' pronto' : '');
     inf.textContent = `Se abre ${CORTO[(p.abre.getDay() + 6) % 7]} ${z(p.abre.getDate())}/${z(p.abre.getMonth() + 1)} a las ${z(p.abre.getHours())}:${z(p.abre.getMinutes())}`;
   }
   setInterval(pintarCuenta, 1000);
 
+  // --- desplegable de centro: las reservas de la web, las clases y la reserva manual son las del centro elegido ---
+  if (VARIOS) {
+    const sel = $(`<div class="tarjeta"><div class="etq">🏢 Centro</div><div class="centro"><select>
+      ${CENTROS.map(k => `<option value="${esc(k)}" ${k === S.k ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select></div></div>`);
+    sel.querySelector('select').onchange = ev => {
+      S.k = ev.target.value; vibra();
+      try { localStorage.setItem('centro', S.k); } catch (e) {}
+      pintarWeb(); pintarPestanas(); pintarRejilla(); pintarManual();
+    };
+    app.append(sel);
+  }
+
   // --- reservas confirmadas en la web (las mira el PC con ver_reservas.py; 🔄 arriba para comprobar ahora) ---
   // W.p = {persona: [[fecha, inicio, fin, carrito], ...]}, W.x = personas cuyas reservas puedo anular, W.e = iconos.
   // Titular (admin): pestañas por persona (las mismas que "Clases cada semana") y puede anular las de todos.
   // Beneficiario: solo ve y anula las suyas. Los permisos los vuelve a comprobar el bot.
+  // Cada reserva: [fecha, inicio, fin, carrito, centro]; solo se enseñan las del centro elegido.
   const W = E.w || { t: '', ok: false, p: {} };  // botón 📱 App antiguo: sin datos de la web
-  const lista = n => { const v = W.p[n]; return Array.isArray(v) ? v : (v && v.r) || []; };  // también formato {e, x, r}
+  const lista = n => { const v = W.p[n]; return (Array.isArray(v) ? v : (v && v.r) || []).filter(f => delCentro(S.k, f[4])); };
   // "Ninguna reserva… <broma>": una de 100 al azar cada vez, sin repetir ninguna de las últimas 30
   // (se recuerdan en el móvil)
   const BROMAS = [
@@ -290,7 +327,7 @@ function iniciar() {
       const dif = Math.round((hoy - new Date(a, m - 1, d)) / 864e5);
       return (dif === 0 ? 'hoy' : dif === 1 ? 'ayer' : `el ${z(d)}/${z(m)}`) + ` a las ${h}`;
     };
-    web.innerHTML = '<div class="etq">📅 Reservas confirmadas en la web</div>';
+    web.innerHTML = `<div class="etq">📅 Reservas confirmadas en la web${VARIOS ? ' · ' + esc(S.k) : ''}</div>`;
     let ver = Object.keys(W.p);
     if (!E.lim && ver.length > 1) {  // titular: elegir persona (selector como el de la app del PC)
       const seg = $(`<div class="segmento"></div>`);
@@ -332,29 +369,38 @@ function iniciar() {
   }
 
   // --- clases por persona ---
-  const clases = $(`<div class="tarjeta"><div class="etq">🗓 Clases cada semana</div><div class="pestanas"></div>
+  const clases = $(`<div class="tarjeta"><div class="etq">🗓 Clases cada semana<span class="k"></span></div><div class="pestanas"></div>
     <div class="rejilla"></div><div class="info" style="margin-top:8px">La reserva se abre ${E.da} días y ${E.ha} h antes de cada clase.</div></div>`);
   app.append(clases);
   function pintarPestanas() {
     const c = clases.querySelector('.pestanas'); c.innerHTML = '';
     for (const n of personas) {
       const b = $(`<button class="pest ${n === S.pers ? 'activa' : ''}"><img src="img/${esc(E.p[n].av)}" alt="">
-        <span>${esc(n)}<span class="n">${S.p[n].size} clase${S.p[n].size === 1 ? '' : 's'}/sem.</span></span></button>`);
+        <span>${esc(n)}<span class="n">${S.p[n][S.k].size} clase${S.p[n][S.k].size === 1 ? '' : 's'}/sem.</span></span></button>`);
       b.onclick = () => { S.pers = n; vibra(); pintarPestanas(); pintarRejilla(); pintarWeb(); };
       c.append(b);
     }
   }
   function pintarRejilla() {
-    const r = clases.querySelector('.rejilla'); r.innerHTML = '<div></div>';
-    HORAS.forEach(h => r.append($(`<div class="h">${h}</div>`)));
+    // horas del centro elegido; si el fin de semana son otras, sale otra fila de horas encima del sábado
+    clases.querySelector('.etq .k').textContent = VARIOS ? ' · ' + S.k : '';
+    const r = clases.querySelector('.rejilla'); r.innerHTML = '';
+    const lv = horasDe(S.k, 0), fd = horasDe(S.k, 5), cols = Math.max(lv.length, fd.length);
+    r.style.gridTemplateColumns = `38px repeat(${cols}, 1fr)`;
+    const cabecera = hs => { r.append($('<div></div>')); for (let i = 0; i < cols; i++) r.append($(`<div class="h">${hs[i] || ''}</div>`)); };
+    cabecera(lv);
     for (let d = 0; d < 7; d++) {
+      if (d === 5 && fd.join() !== lv.join()) { r.append($('<div class="finde">Sábado y domingo</div>')); cabecera(fd); }
+      const hs = horasDe(S.k, d), set = S.p[S.pers][S.k];
       r.append($(`<div class="d">${CORTO[d]}</div>`));
-      HORAS.forEach(h => {
-        const k = d + '|' + h, si = S.p[S.pers].has(k), cambio = si !== ini[S.pers].has(k);
+      for (let i = 0; i < cols; i++) {
+        const h = hs[i];
+        if (!h) { r.append($('<div></div>')); continue; }
+        const k = d + '|' + h, si = set.has(k), cambio = si !== ini[S.pers][S.k].has(k);
         const b = $(`<button class="celda ${si ? 'si' : ''} ${cambio ? 'cambio' : ''}">${si ? '✓' : ''}</button>`);
-        b.onclick = () => { si ? S.p[S.pers].delete(k) : S.p[S.pers].add(k); vibra(); pintarRejilla(); pintarPestanas(); pintarCuenta(); actualizarBoton(); };
+        b.onclick = () => { si ? set.delete(k) : set.add(k); vibra(); pintarRejilla(); pintarPestanas(); pintarCuenta(); actualizarBoton(); };
         r.append(b);
-      });
+      }
     }
   }
 
@@ -366,14 +412,15 @@ function iniciar() {
   const z2 = x => String(x).padStart(2, '0');
   const diaTxt = clave => { const f = new Date(+clave.slice(0, 4), +clave.slice(4, 6) - 1, +clave.slice(6, 8));
     return `${DIAS[(f.getDay() + 6) % 7]} ${z2(f.getDate())}/${z2(f.getMonth() + 1)}`; };
-  const HL = E.hl && E.p[E.hl.p] && Array.isArray(E.hl.h) ? E.hl : null;
+  const HL = E.hl && E.p[E.hl.p] && Array.isArray(E.hl.h) ? E.hl : null;  // HL.k = centro de esas horas
   if (HL) { S.mPers = HL.p; S.mDia = HL.f; S.mDiaTxt = diaTxt(HL.f); }
-  const man = $(`<div class="tarjeta"><div class="etq">⚡ Reserva manual (ahora mismo)</div>
+  const man = $(`<div class="tarjeta"><div class="etq">⚡ Reserva manual (ahora mismo)<span class="k"></span></div>
     <div class="fila per"></div><div class="fila dias"></div><div class="hl"></div>
     <button class="boton">Elige persona y día</button><div class="info nota"></div></div>`);
   app.append(man);
   function pintarManual() {
     const z = z2;
+    man.querySelector('.etq .k').textContent = VARIOS ? ' · ' + S.k : '';
     const fp = man.querySelector('.per'); fp.innerHTML = '';
     personas.forEach(n => { const b = $(`<button class="chip ${n === S.mPers ? 'sel' : ''}">${E.p[n].e} ${esc(n)}</button>`);
       b.onclick = () => { S.mPers = n; vibra(); pintarManual(); }; fp.append(b); });
@@ -387,7 +434,7 @@ function iniciar() {
     }
     // cuadros de horas (solo si lo que mandó el bot es de la persona y el día elegidos)
     const fh = man.querySelector('.hl'); fh.innerHTML = '';
-    const verHL = HL && HL.p === S.mPers && HL.f === S.mDia;
+    const verHL = HL && HL.p === S.mPers && HL.f === S.mDia && delCentro(S.k, HL.k);
     if (verHL) {
       if (HL.m) fh.append($(`<div class="aviso ${HL.m.startsWith('✅') ? 'bien' : HL.m.startsWith('❌') ? 'mal' : ''}">${esc(HL.m)}</div>`));
       if (HL.c !== 0) {
@@ -407,9 +454,9 @@ function iniciar() {
           }
           const b = $(`<button class="cuadro ${esc(est)}" ${est === 'libre' ? '' : 'disabled'}>${esc(hora)}<small>${esc(abajo)}</small></button>`);
           if (est === 'libre') b.onclick = () => {
-            const txt = `¿Reservar AHORA para ${S.mPers} el ${S.mDiaTxt} a las ${hora}?\n\nLa app se cerrará y te llegará el resultado.`
+            const txt = `¿Reservar AHORA para ${S.mPers} el ${S.mDiaTxt} a las ${hora}${VARIOS ? ' en ' + S.k : ''}?\n\nLa app se cerrará y te llegará el resultado.`
               + (cambios() ? '\n\n(Perderás los cambios sin guardar de las clases.)' : '');
-            const enviar = ok => ok && tg.sendData(JSON.stringify({ a: 'reservar_hora', p: S.mPers, f: S.mDia, h: hora }));
+            const enviar = ok => ok && tg.sendData(JSON.stringify({ a: 'reservar_hora', p: S.mPers, f: S.mDia, h: hora, k: S.k }));
             if (tg && tg.showConfirm) tg.showConfirm(txt, enviar); else enviar(confirm(txt));
           };
           cuad.append(b);
@@ -424,7 +471,7 @@ function iniciar() {
     bt.textContent = !listo ? 'Elige persona y día' : verHL ? '🔄 Mirar otra vez' : `🔍 Ver horas libres · ${S.mPers} · ${S.mDiaTxt}`;
     man.querySelector('.nota').textContent = listo ? 'La app se cerrará y en unos 20 segundos te llegará un 📱 App nuevo con las horas.' : '';
     bt.onclick = () => {
-      const enviar = ok => ok && tg.sendData(JSON.stringify({ a: 'horas', p: S.mPers, f: S.mDia }));
+      const enviar = ok => ok && tg.sendData(JSON.stringify({ a: 'horas', p: S.mPers, f: S.mDia, k: S.k }));
       if (cambios()) tg.showConfirm('Tienes cambios sin guardar. ¿Mirar las horas igualmente y descartarlos?', enviar);
       else enviar(true);
     };
@@ -444,7 +491,8 @@ function iniciar() {
     } else tg.MainButton.hide();
   }
   if (tg) tg.MainButton.onClick(() => {
-    const p = Object.fromEntries(personas.map(n => [n, [...S.p[n]].map(k => { const [d, h] = k.split('|'); return [+d, h]; })]));
+    // p = {persona: {centro: [[día, hora], ...]}} (todas las de todos los centros)
+    const p = Object.fromEntries(personas.map(n => [n, Object.fromEntries(CENTROS.map(k => [k, aLista(S.p[n][k])]))]));
     tg.sendData(JSON.stringify({ a: 'guardar', on: S.on, p }));
   });
 
